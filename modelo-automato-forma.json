@@ -1,0 +1,104 @@
+{
+  "_guia_para_ia": {
+    "tarefa": "Gere um autômato para o enunciado do usuário usando esta estrutura. Responda com JSON válido, sem comentários nem blocos Markdown. Substitua os dados do exemplo; o campo _guia_para_ia é opcional e ignorado na importação.",
+    "campos": {
+      "version": "Obrigatório: número 1.",
+      "title": "Obrigatório: nome do projeto, string de até 120 caracteres.",
+      "mode": "Obrigatório: \"AFD\" ou \"AFN\".",
+      "nodes": "Obrigatório: array de estados. Cada estado tem id (string única de 1 a 120 caracteres), label (nome de 1 a 30 caracteres), x e y (números), initial e final (booleanos true/false).",
+      "edges": "Obrigatório: array de transições. Cada transição tem id único, source e target (IDs de estados existentes) e symbols (array de 1 a 100 strings únicas, cada uma com exatamente um caractere Unicode). Para aceitar 0 OU 1 use [\"0\", \"1\"], nunca [\"0,1\"] nem \"0,1\".",
+      "curve": "Opcional em uma transição entre estados: {\"along\": 0, \"normal\": 80}. São deslocamentos do controle Bézier no eixo entre os estados e na perpendicular, em unidades do canvas. normal: 0 deixa reta. Omita para curvatura automática.",
+      "loop": "Opcional em auto-loop (source igual a target): {\"angle\": -1.5707963267948966, \"size\": 80}. Ângulo em radianos; -π/2 aponta para cima. Tamanho de 35 a 1500. Omita para usar o padrão.",
+      "notes": "Obrigatório: array de anotações, podendo ser []. Cada anotação tem id único, x e y numéricos e text (string de até 4000 caracteres). scale é opcional, de 0.5 a 4, com padrão 1, para o tamanho do texto. Use \\n para novas linhas no JSON."
+    },
+    "regras": [
+      "Todos os IDs devem ser únicos no projeto inteiro, inclusive entre estados, transições e anotações.",
+      "Para simular, crie pelo menos um estado e marque exatamente um estado com initial: true. Pode haver zero ou vários estados finais.",
+      "No AFD, um símbolo só pode aparecer uma vez entre todas as transições de saída de cada estado. Não é obrigatório definir saída para todo símbolo; ausência de transição rejeita a palavra.",
+      "No AFN, saídas alternativas para o mesmo símbolo são permitidas. Use \"ε\" (epsilon grego) para transição vazia; ε é proibido no AFD.",
+      "Não inclua espaços dentro dos símbolos por acidente: \"0\" é diferente de \" \". Espaços de formatação entre itens do JSON são permitidos.",
+      "Posicione os estados com pelo menos 160 unidades de distância. Sugestão: x entre 160 e 1000 e y entre 160 e 400. Coordenadas e controles precisam ser finitos e ter valor absoluto menor que 1000000.",
+      "Limites: arquivo até 2 MB, até 500 estados, 3000 transições e 500 anotações."
+    ],
+    "exemplo": "O exemplo abaixo é um AFD sobre {0,1} que aceita exatamente as palavras que terminam em 1. A palavra vazia é rejeitada."
+  },
+  "version": 1,
+  "title": "Palavras que terminam em 1",
+  "mode": "AFD",
+  "nodes": [
+    {
+      "id": "q0",
+      "label": "q0",
+      "x": 240,
+      "y": 260,
+      "initial": true,
+      "final": false
+    },
+    {
+      "id": "q1",
+      "label": "q1",
+      "x": 520,
+      "y": 260,
+      "initial": false,
+      "final": true
+    }
+  ],
+  "edges": [
+    {
+      "id": "e0",
+      "source": "q0",
+      "target": "q0",
+      "symbols": [
+        "0"
+      ],
+      "loop": {
+        "angle": -1.5707963267948966,
+        "size": 80
+      }
+    },
+    {
+      "id": "e1",
+      "source": "q0",
+      "target": "q1",
+      "symbols": [
+        "1"
+      ],
+      "curve": {
+        "along": 0,
+        "normal": 60
+      }
+    },
+    {
+      "id": "e2",
+      "source": "q1",
+      "target": "q0",
+      "symbols": [
+        "0"
+      ],
+      "curve": {
+        "along": 0,
+        "normal": 60
+      }
+    },
+    {
+      "id": "e3",
+      "source": "q1",
+      "target": "q1",
+      "symbols": [
+        "1"
+      ],
+      "loop": {
+        "angle": -1.5707963267948966,
+        "size": 80
+      }
+    }
+  ],
+  "notes": [
+    {
+      "id": "n0",
+      "x": 180,
+      "y": 95,
+      "text": "Alfabeto: {0, 1}\nAceita palavras que terminam em 1."
+    }
+  ]
+}
