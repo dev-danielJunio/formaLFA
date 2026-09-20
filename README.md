@@ -1,35 +1,5 @@
 # Forma — Laboratório de Autômatos
 
-## Organização automática e ferramentas atuais (v1.7)
-
-A importação organiza o desenho por padrão. `autoLayout.ts` separa estados em camadas a partir do inicial, inclui componentes desconectados e ordena vizinhos para reduzir cruzamentos. Transições paralelas e em sentidos opostos recebem faixas de curvatura distintas. Loops são distribuídos em ângulos voltados para áreas livres. Curvas candidatas são avaliadas por amostragem contra estados, outras linhas e rótulos usando um índice espacial. Anotações ficam em uma margem separada. IDs, símbolos, estados iniciais/finais e comportamento matemático são preservados. A opção do modal pode ser desmarcada para manter as coordenadas originais.
-
-O enquadramento após importar considera as curvas desenhadas e centraliza o conjunto. A organização é heurística: reduz colisões e separa faixas coincidentes, mas grafos densos ou não planares ainda podem exigir cruzamentos. As curvas continuam ajustáveis manualmente.
-
-A barra oferece somente Texto e Arrastar visualização como ferramentas, além do histórico. Sem ferramenta ativa, duplo clique no fundo cria estado. Texto arma a próxima inserção por duplo clique e desativa ao abrir o campo focado. A edição tem borda tracejada; clicar fora salva e desmarca. Um clique na anotação mostra alças nos quatro cantos: arraste o corpo para mover ou uma alça para mudar proporcionalmente o tamanho do texto. Clicar no fundo limpa a seleção. A escala (0.5 a 4) é salva em JSON e respeitada por SVG/PNG. Cada redimensionamento pode ser desfeito em uma ação.
-
-Verificado no navegador: retorno automático ao modo de criar estados depois do texto, borda de edição, redução por alça, desmarcação e importação de cinco estados coincidentes com onze transições (incluindo paralelas, reversas e loops), com separação e enquadramento. Os 43 testes cobrem preservação da simulação, distribuição, rótulos, loops, redimensionamento com canto oposto fixo, persistência e exportação.
-
-## Importação e modelo para IA (v1.6)
-
-O botão Importar no cabeçalho (ou Exportar → Abrir JSON) abre um modal para escolher um arquivo de até 2 MB ou colar o JSON. O resumo mostra nome, tipo e quantidades de elementos antes da confirmação. Erros mantêm o modal aberto e preservam o projeto atual; Ctrl+Z desfaz uma importação concluída.
-
-No mesmo modal, Baixar modelo JSON para IA entrega `modelo-automato-forma.json`: um exemplo executável com explicações dos campos obrigatórios, curvaturas opcionais, loops, símbolos, coordenadas, limites e regras de AFD/AFN. Envie o arquivo à IA junto com o enunciado. As instruções ficam em `_guia_para_ia`, que o importador ignora; os dados do exemplo estão na raiz e são importáveis diretamente.
-
-A importação aceita arquivos UTF-8 com BOM e aplica o limite em bytes também ao texto colado. A validação estrutural ocorre antes de substituir o documento; problemas matemáticos continuam sendo explicados pelo simulador. Foram aprovados 35 testes e o build. No navegador foram verificados download, erro de JSON inválido sem alterar o canvas, leitura do arquivo do modelo, importação de seus 2 estados/4 transições e desfazer. Modal verificado em tela estreita sem rolagem horizontal.
-
-## Interação atual das anotações (v1.5)
-
-Um clique seleciona a anotação com contorno tracejado. Arraste para movê-la livremente, inclusive com a ferramenta Texto ativa. Dois cliques editam no próprio lugar; um duplo clique no fundo vazio, usando Selecionar, cria uma anotação já em edição. Para criar estados, escolha Estado na barra.
-
-O editor é um `textarea` HTML absoluto, irmão do SVG, sem fundo, borda, outline, sombra ou redimensionamento. `noteLayout.ts` e a classe `note-typography` compartilham a fonte, as medidas e o espaçamento de linhas entre a visualização e a edição. A posição considera pan, zoom e o tamanho real do canvas. O texto original fica oculto durante a edição. Não há campo externo de anotação em Propriedades.
-
-Clicar fora salva e remove o overlay. Enter insere uma linha; Ctrl/Cmd+Enter também salva; Esc cancela. Apagar todo o conteúdo e sair remove a anotação; uma anotação nova vazia é descartada. Essas alterações podem ser desfeitas. A criação só entra no histórico quando o texto é confirmado.
-
-Verificado no navegador: seleção sem edição por clique simples, movimento com Texto ativo, criação no fundo por duplo clique sem criar estados, edição multilinha, salvamento ao clicar fora e alinhamento entre visualização e overlay a 100% e 110% de zoom. Os 31 testes existentes e o build passaram.
-
-MVP frontend de um editor e simulador de AFD/AFN, em português. React + Vite + TypeScript, Zustand, TailwindCSS e SVG direto. Sem backend, contas, cobrança ou sincronização em nuvem. Projetos são salvos e reabertos por JSON; apenas a preferência de tema usa localStorage.
-
 ## Executar
 
 Requer Node.js 22 ou superior e npm.
