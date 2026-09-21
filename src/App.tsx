@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ArrowDownToLine,
   ChevronDown,
+  ChevronUp,
   FilePlus2,
   FolderOpen,
   HelpCircle,
@@ -13,6 +14,7 @@ import {
 import { useEditor } from "./store";
 import { Canvas } from "./components/Canvas";
 import { Simulator } from "./components/Simulator";
+import { QuickTest } from "./components/QuickTest";
 import { Inspector } from "./components/Inspector";
 import { useSimulation } from "./useSimulation";
 import { exportProject } from "./io";
@@ -23,6 +25,8 @@ export default function App() {
     sim = useSimulation();
   const [tab, setTab] = useState<"simulation" | "properties">("simulation"),
     [menu, setMenu] = useState(false),
+    [fullscreen, setFullscreen] = useState(false),
+    [panelOpen, setPanelOpen] = useState(true),
     [dark, setDark] = useState(() => {
       try {
         return localStorage.getItem("forma-theme") === "dark";
@@ -35,6 +39,18 @@ export default function App() {
     [importing, setImporting] = useState(false),
     [fitRequest, setFitRequest] = useState(0);
   const helpDialog = useRef<HTMLDialogElement>(null);
+  const openProperties = () => {
+    setTab("properties");
+    setPanelOpen(true);
+  };
+  useEffect(() => {
+    if (!fullscreen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [fullscreen]);
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
     try {
@@ -54,6 +70,12 @@ export default function App() {
   }, [help]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || document.querySelector("dialog[open]")) return;
+      if (e.key === "Escape" && fullscreen) {
+        e.preventDefault();
+        setFullscreen(false);
+        return;
+      }
       if (
         document.querySelector("dialog[open]") ||
         (e.target as HTMLElement).closest(
@@ -62,7 +84,11 @@ export default function App() {
       )
         return;
       const mod = e.ctrlKey || e.metaKey;
-      if (mod && e.key.toLowerCase() === "z") {
+      if (!mod && !e.altKey && !e.repeat && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        setMenu(false);
+        setFullscreen((value) => !value);
+      } else if (mod && e.key.toLowerCase() === "z") {
         e.preventDefault();
         e.shiftKey ? redo() : undo();
       } else if (mod && e.key.toLowerCase() === "y") {
@@ -85,7 +111,7 @@ export default function App() {
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [doc, undo, redo, select, removeSelected]);
+  }, [doc, undo, redo, select, removeSelected, fullscreen]);
   const exportAs = async (format: "json" | "svg" | "png") => {
     setMenu(false);
     try {
@@ -96,7 +122,9 @@ export default function App() {
     }
   };
   return (
-    <div className="app">
+    <div
+      className={`app${fullscreen ? " is-fullscreen" : ""}${!panelOpen ? " panel-collapsed" : ""}`}
+    >
       <header className="topbar">
         <a
           className="brand"
@@ -113,7 +141,7 @@ export default function App() {
         <button
           className="document-title"
           title="Editar propriedades do projeto"
-          onClick={() => setTab("properties")}
+          onClick={openProperties}
         >
           {doc.title}
           <ChevronDown size={15} />
@@ -173,7 +201,7 @@ export default function App() {
                         notes: [],
                       });
                       setMenu(false);
-                      setTab("properties");
+                      openProperties();
                       setToast("Novo projeto. Ctrl+Z restaura o anterior.");
                     }}
                   >
@@ -217,7 +245,9 @@ export default function App() {
         />
       )}
       <main className="workspace">
-        <section className={`editor result-${sim.frame?.status ?? "idle"}`}>
+        <section
+          className={`editor result-${sim.highlight ? (sim.frame?.status ?? "idle") : "idle"}`}
+        >
           <div className="editor-bar">
             <span className="file-icon">
               <Workflow size={18} />
@@ -226,7 +256,7 @@ export default function App() {
             <button
               className="badge"
               title="Alterar tipo nas propriedades"
-              onClick={() => setTab("properties")}
+              onClick={openProperties}
             >
               {doc.mode}
             </button>
@@ -237,35 +267,54 @@ export default function App() {
             </div>
           </div>
           <Canvas
+            fullscreen={fullscreen}
+            onToggleFullscreen={() => setFullscreen((value) => !value)}
+            quickTest={<QuickTest sim={sim} />}
             fitRequest={fitRequest}
             pulse={sim.index}
-            active={sim.frame?.active ?? []}
-            traversed={sim.frame?.edges ?? []}
+            active={sim.highlight ? (sim.frame?.active ?? []) : []}
+            traversed={sim.highlight ? (sim.frame?.edges ?? []) : []}
             onSelection={() => setTab("properties")}
           />
         </section>
         <section className="bottom-panel" aria-label="Simulação e propriedades">
-          <div
-            className="side-tabs"
-            role="tablist"
-            aria-label="Painel inferior"
-          >
-            <button
-              role="tab"
-              aria-selected={tab === "simulation"}
-              onClick={() => setTab("simulation")}
+          <div className="panel-heading">
+            <div
+              className="side-tabs"
+              role="tablist"
+              aria-label="Painel inferior"
             >
-              Simular
-            </button>
+              <button
+                role="tab"
+                aria-selected={tab === "simulation"}
+                onClick={() => {
+                  setTab("simulation");
+                  setPanelOpen(true);
+                }}
+              >
+                Simular
+              </button>
+              <button
+                role="tab"
+                aria-selected={tab === "properties"}
+                onClick={openProperties}
+              >
+                Propriedades
+              </button>
+            </div>
             <button
-              role="tab"
-              aria-selected={tab === "properties"}
-              onClick={() => setTab("properties")}
+              className="panel-toggle"
+              aria-expanded={panelOpen}
+              aria-controls="panel-content"
+              onClick={() => setPanelOpen((value) => !value)}
             >
-              Propriedades
+              {panelOpen ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+              {panelOpen ? "Recolher painel" : "Abrir painel"}
             </button>
           </div>
-          {tab === "simulation" ? <Simulator sim={sim} /> : <Inspector />}
+          <div id="panel-content" hidden={!panelOpen}>
+            {tab === "simulation" ? <Simulator sim={sim} /> : <Inspector />}
+          </div>
         </section>
       </main>
       <footer className="app-footer">
@@ -300,7 +349,7 @@ export default function App() {
         <ol>
           <li>
             Dê dois cliques no fundo para criar um estado. Para inserir uma
-            anotação, escolha Texto e dê dois cliques no fundo.
+            anotação, escolha Texto e clique uma vez no fundo.
           </li>
           <li>
             Passe o mouse sobre um estado e arraste uma âncora até outro. Volte
@@ -330,9 +379,20 @@ export default function App() {
           ou diminuir o texto. Dois cliques reabrem a edição.
         </p>
         <p>
-          Arraste no fundo com o botão esquerdo ou direito para selecionar em
-          grupo. Ctrl + clique altera a seleção. A ferramenta mão move a
-          visualização.
+          Arraste no fundo com o botão esquerdo para selecionar em grupo. Ctrl +
+          clique altera a seleção. Segure o botão direito e arraste para mover o
+          quadro temporariamente; solte para voltar à ferramenta anterior. Um
+          clique direito sem arrastar abre o menu do elemento. Role a roda do
+          mouse sobre o quadro para aproximar ou afastar o zoom em torno do
+          cursor.
+        </p>
+        <div className="shortcut-row">
+          <kbd>F</kbd> Tela cheia <kbd>Esc</kbd> Sair da tela cheia
+        </div>
+        <p>
+          Use a barra flutuante para testar com Enter ou Play. Recolha o painel
+          inferior para ampliar o quadro; reabra as abas para ver os passos ou
+          as propriedades.
         </p>
         <div className="shortcut-row">
           <kbd>Ctrl Z</kbd> Desfazer <kbd>Ctrl Y</kbd> Refazer

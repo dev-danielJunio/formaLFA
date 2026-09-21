@@ -1,10 +1,23 @@
 import {
   useEffect,
+  useId,
   useRef,
   useState,
+  type ReactNode,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Hand, Maximize, Minus, Plus, Redo2, Type, Undo2 } from "lucide-react";
+import {
+  Hand,
+  Grab,
+  Maximize,
+  Expand,
+  Minimize,
+  Minus,
+  Plus,
+  Redo2,
+  Type,
+  Undo2,
+} from "lucide-react";
 import { useEditor } from "../store";
 import {
   emptySelection,
@@ -43,6 +56,7 @@ type Gesture =
   | { kind: "move"; start: Point; delta: Point; selection: Selection }
   | { kind: "connect"; source: string; start: Point; end: Point }
   | { kind: "marquee"; start: Point; end: Point; additive: boolean }
+  | { kind: "insert-note"; start: Point }
   | { kind: "pan"; start: Point; origin: Point };
 export function Canvas({
   active,
@@ -50,12 +64,18 @@ export function Canvas({
   onSelection,
   pulse,
   fitRequest = 0,
+  fullscreen,
+  onToggleFullscreen,
+  quickTest,
 }: {
   pulse: number;
   active: string[];
   traversed: string[];
   onSelection: () => void;
   fitRequest?: number;
+  fullscreen: boolean;
+  onToggleFullscreen: () => void;
+  quickTest: ReactNode;
 }) {
   const {
     doc,
@@ -136,7 +156,11 @@ export function Canvas({
       : undefined;
   const longPress = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastEdgeClick = useRef<string | null>(null);
-  const rightBackground = useRef(false);
+  const rightPress = useRef<{
+    start: Point;
+    moved: boolean;
+    target?: { kind: keyof Selection; id: string };
+  } | null>(null);
   const cancelLongPress = () => {
     if (longPress.current !== null) clearTimeout(longPress.current);
     longPress.current = null;
@@ -161,6 +185,7 @@ export function Canvas({
   const svg = useRef<SVGSVGElement>(null),
     gesture = useRef<Gesture | null>(null),
     [draft, setDraft] = useState<Gesture | null>(null);
+  const gridId = useId();
   const [viewport, setViewport] = useState({
     width: 900,
     height: 570,
@@ -207,12 +232,17 @@ export function Canvas({
       if (e.key === "Escape") clear();
     };
     window.addEventListener("keydown", cancel);
-    return () => window.removeEventListener("keydown", cancel);
+    window.addEventListener("blur", clear);
+    return () => {
+      window.removeEventListener("keydown", cancel);
+      window.removeEventListener("blur", clear);
+    };
   }, []);
   const down = (e: ReactPointerEvent<SVGSVGElement>) => {
     // An outside click first commits the focused label through its blur event.
     if (currentEdit || renameNode || currentNote) return;
     if (gesture.current || ![0, 1, 2].includes(e.button)) return;
+    rightPress.current = null;
     const target = e.target as Element,
       p = local(e.clientX, e.clientY),
       anchor = target.closest("[data-anchor]")?.getAttribute("data-anchor"),
@@ -222,13 +252,38 @@ export function Canvas({
         target.closest("[data-edge]")?.getAttribute("data-edge") ??
         target.closest("[data-edge-label]")?.getAttribute("data-edge-label");
     lastEdgeClick.current = edge ?? null;
-    rightBackground.current = e.button === 2 && !node && !note && !edge;
-    if (e.button === 2 && (node || note || edge)) {
+    // Navigation takes priority over editing, including on labels and anchors.
+    if (
+      e.button === 1 ||
+      e.button === 2 ||
+      (tool === "pan" && e.button === 0)
+    ) {
       e.preventDefault();
+      cancelLongPress();
+      setContext(null);
+      if (e.button === 2)
+        rightPress.current = {
+          start: { x: e.clientX, y: e.clientY },
+          moved: false,
+          target: node
+            ? { kind: "nodes", id: node }
+            : note
+              ? { kind: "notes", id: note }
+              : edge
+                ? { kind: "edges", id: edge }
+                : undefined,
+        };
+      gesture.current = {
+        kind: "pan",
+        start: { x: e.clientX, y: e.clientY },
+        origin,
+      };
+      e.currentTarget.setPointerCapture(e.pointerId);
+      setDraft(gesture.current);
       return;
     }
     const additive = e.ctrlKey || e.metaKey || e.shiftKey;
-    // A label is an edit target, never a curvature handle, even in pan mode.
+    // Outside navigation mode, labels edit symbols instead of bending curves.
     if (
       edge &&
       target.closest("[data-edge-label]") &&
@@ -251,13 +306,6 @@ export function Canvas({
         note: base,
         corner: resize.getAttribute("data-corner")!,
         moved: false,
-      };
-    } else if (e.button === 1 || (tool === "pan" && !node && !note && !edge)) {
-      select(emptySelection());
-      gesture.current = {
-        kind: "pan",
-        start: { x: e.clientX, y: e.clientY },
-        origin,
       };
     } else if (anchor && e.button === 0) {
       gesture.current = { kind: "connect", source: anchor, start: p, end: p };
@@ -307,6 +355,9 @@ export function Canvas({
         handle: edgeGeometry(base, doc).handle,
         moved: false,
       };
+    } else if (tool === "note" && e.button === 0) {
+      select(emptySelection());
+      gesture.current = { kind: "insert-note", start: p };
     } else {
       gesture.current = { kind: "marquee", start: p, end: p, additive };
       if (!additive) select(emptySelection());
@@ -337,6 +388,7 @@ export function Canvas({
   const move = (e: ReactPointerEvent<SVGSVGElement>) => {
     const g = gesture.current;
     if (!g) return;
+    if (g.kind === "insert-note") return;
     const p = local(e.clientX, e.clientY);
     if (g.kind === "resize") {
       if (!g.moved && Math.hypot(p.x - g.start.x, p.y - g.start.y) < 3 / zoom)
@@ -368,6 +420,14 @@ export function Canvas({
       return;
     }
     if (g.kind === "pan") {
+      if (
+        rightPress.current &&
+        Math.hypot(
+          e.clientX - rightPress.current.start.x,
+          e.clientY - rightPress.current.start.y,
+        ) > 3
+      )
+        rightPress.current.moved = true;
       const scale = svg.current!.getScreenCTM()?.a || 1;
       setOrigin({
         x: g.origin.x - (e.clientX - g.start.x) / scale,
@@ -443,7 +503,21 @@ export function Canvas({
             n.y += g.delta.y;
           }
       });
-    else if (g.kind === "marquee") {
+    else if (
+      g.kind === "insert-note" &&
+      Math.hypot(p.x - g.start.x, p.y - g.start.y) < 4 / zoom
+    ) {
+      beginNoteEditing({ ...g.start, id: uid(), text: "" });
+    } else if (g.kind === "pan" && e.button === 2) {
+      const press = rightPress.current;
+      if (
+        press?.target &&
+        !press.moved &&
+        Math.hypot(e.clientX - press.start.x, e.clientY - press.start.y) <= 3
+      ) {
+        openContext(press.target.kind, press.target.id, e.clientX, e.clientY);
+      }
+    } else if (g.kind === "marquee") {
       const minX = Math.min(g.start.x, p.x),
         maxX = Math.max(g.start.x, p.x),
         minY = Math.min(g.start.y, p.y),
@@ -541,6 +615,43 @@ export function Canvas({
     }));
     setZoom(z);
   };
+  useEffect(() => {
+    const element = svg.current;
+    if (!element) return;
+    const wheel = (event: WheelEvent) => {
+      if (
+        (event.target as Element).closest(
+          "input,textarea,select,[contenteditable=true]",
+        )
+      )
+        return;
+      if (!event.deltaY) return;
+      event.preventDefault();
+      // Keep pointer-captured gestures in one coordinate system until release.
+      if (gesture.current) return;
+      const unit =
+        event.deltaMode === 1
+          ? 16
+          : event.deltaMode === 2
+            ? element.clientHeight
+            : 1;
+      const delta = Math.max(-100, Math.min(100, event.deltaY * unit));
+      const next = Math.max(
+        0.35,
+        Math.min(2.5, zoom * Math.exp(-delta * 0.0015)),
+      );
+      if (next === zoom) return;
+      const anchor = local(event.clientX, event.clientY);
+      setOrigin({
+        x: anchor.x - ((anchor.x - origin.x) * zoom) / next,
+        y: anchor.y - ((anchor.y - origin.y) * zoom) / next,
+      });
+      setZoom(next);
+    };
+    // React wheel listeners are passive; a native listener prevents page scroll.
+    element.addEventListener("wheel", wheel, { passive: false });
+    return () => element.removeEventListener("wheel", wheel);
+  }, [zoom, origin]);
   const fit = () => {
     const points = [
       ...doc.nodes.flatMap((n) => [
@@ -593,21 +704,22 @@ export function Canvas({
       fit();
     }
   }, [fitRequest, viewport.width, viewport.height, doc]);
+  const displayedTool = draft?.kind === "pan" ? "pan" : tool;
   return (
     <>
       <div className="tools" role="toolbar" aria-label="Ferramentas do canvas">
         {(
           [
             ["note", Type, "Texto"],
-            ["pan", Hand, "Arrastar visualização"],
+            ["pan", draft?.kind === "pan" ? Grab : Hand, "Arrastar quadro"],
           ] as const
         ).map(([key, Icon, label]) => (
           <button
             key={key}
             aria-label={label}
             title={label}
-            aria-pressed={tool === key}
-            className={tool === key ? "active" : ""}
+            aria-pressed={displayedTool === key}
+            className={displayedTool === key ? "active" : ""}
             onClick={() => {
               setTool(tool === key ? "select" : key);
               select(emptySelection());
@@ -637,7 +749,7 @@ export function Canvas({
       <div className="canvas-wrap">
         <svg
           ref={svg}
-          className={`canvas tool-${tool}`}
+          className={`canvas tool-${displayedTool}${draft?.kind === "pan" ? " is-panning" : ""}`}
           aria-label="Canvas de autômatos"
           viewBox={`${origin.x} ${origin.y} ${viewport.width / zoom} ${viewport.height / zoom}`}
           onPointerDown={down}
@@ -647,6 +759,8 @@ export function Canvas({
           onLostPointerCapture={clear}
           onContextMenu={(e) => {
             e.preventDefault();
+            // Mouse context menus are handled on release, after detecting a pan.
+            if (rightPress.current) return;
             cancelLongPress();
             const target = e.target as Element;
             const note = target
@@ -667,10 +781,6 @@ export function Canvas({
               );
               return;
             }
-            if (rightBackground.current) {
-              rightBackground.current = false;
-              return;
-            }
             const p = local(e.clientX, e.clientY);
             const node = [...doc.nodes]
               .reverse()
@@ -681,7 +791,8 @@ export function Canvas({
             }
           }}
           onDoubleClick={(e) => {
-            if (currentEdit || currentNote || renameNode) return;
+            if (tool === "pan" || currentEdit || currentNote || renameNode)
+              return;
             const t = e.target as Element;
             const point = local(e.clientX, e.clientY);
             const edgeId =
@@ -733,6 +844,27 @@ export function Canvas({
             }
           }}
         >
+          <defs>
+            <pattern
+              id={gridId}
+              x="-10"
+              y="-10"
+              width="20"
+              height="20"
+              patternUnits="userSpaceOnUse"
+            >
+              <circle cx="10" cy="10" r="0.8" fill="var(--dot)" />
+            </pattern>
+          </defs>
+          <rect
+            className="canvas-grid"
+            x={origin.x}
+            y={origin.y}
+            width={viewport.width / zoom}
+            height={viewport.height / zoom}
+            fill={`url(#${gridId})`}
+            pointerEvents="none"
+          />
           <Diagram
             doc={visible}
             selection={selection}
@@ -888,10 +1020,18 @@ export function Canvas({
         )}
         <div className="canvas-hint">
           <span>
-            {tool === "note" ? "Duplo clique: texto" : "Duplo clique: estado"}
+            {displayedTool === "pan"
+              ? "Arraste para mover o quadro"
+              : tool === "note"
+                ? "Clique: inserir texto"
+                : "Duplo clique: estado"}
           </span>
           <i />
-          <span>Arraste uma âncora: conectar</span>
+          <span>
+            {displayedTool === "pan"
+              ? "Clique na mão para voltar a editar"
+              : "Arraste uma âncora: conectar"}
+          </span>
         </div>
         <div className="zoom-controls">
           <button aria-label="Diminuir zoom" onClick={() => zoomTo(zoom - 0.1)}>
@@ -905,7 +1045,19 @@ export function Canvas({
           <button aria-label="Enquadrar autômato" onClick={fit}>
             <Maximize size={16} />
           </button>
+          <i />
+          <button
+            className="fullscreen-toggle"
+            aria-label={fullscreen ? "Sair da Tela Cheia" : "Tela cheia"}
+            aria-pressed={fullscreen}
+            title={fullscreen ? "Sair da Tela Cheia (Esc)" : "Tela cheia (F)"}
+            onClick={onToggleFullscreen}
+          >
+            {fullscreen ? <Minimize size={16} /> : <Expand size={16} />}
+            {fullscreen && <span>Sair da Tela Cheia</span>}
+          </button>
         </div>
+        {quickTest}
       </div>
       <div className="editor-footer">
         <button

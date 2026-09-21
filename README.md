@@ -202,3 +202,19 @@ Verificado no navegador nesta revisão: arraste direto da curva, ajuste de loop,
 - O menu de botão direito também funciona nas anotações (Editar texto/Excluir) e transições (Editar símbolos/Excluir). A exclusão continua reversível.
 
 Verificado no navegador: foco no rótulo com clique simples, `1, 0` preservado, arraste sem alça, duas anotações consecutivas com digitação multilinha, exclusão pelo menu e restauração, reedição por duplo clique, dois estados consecutivos e movimento sem trocar de ferramenta. A barra não se sobrepõe ao canvas.
+
+## Tela cheia e teste rápido
+
+O botão de expandir ao lado do zoom ocupa toda a viewport com o quadro. F alterna esse modo quando não há um campo de texto em edição; Esc ou Sair da Tela Cheia restaura o layout anterior, mantendo zoom, desenho e o estado do painel inferior.
+
+A barra flutuante compartilha a palavra, a reprodução e a velocidade com a simulação. Enter ou Play inicia/retoma os passos na velocidade escolhida em Simular; durante a reprodução, o botão vira Pausar. O indicador ao lado mostra a velocidade atual, inclusive com o painel recolhido ou em tela cheia. Campo vazio testa ε. O resultado é limpo ao editar a palavra ou o autômato; erros de validação são indicados separadamente de rejeição. A explicação aparece ao passar o mouse ou focar o aviso.
+
+Recolher painel libera o espaço vertical para o quadro. As abas Simular e Propriedades reabrem o painel. Selecionar um elemento no desenho não força sua reabertura.
+
+A ferramenta Arrastar quadro move a visualização inteira, inclusive quando o gesto começa sobre estados, transições ou anotações. A grade pontilhada está no mesmo sistema de coordenadas SVG do diagrama e acompanha o arraste e o zoom. A mão fecha durante o arraste; as coordenadas dos componentes e o histórico permanecem intactos. Clique novamente na mão para voltar a editar.
+
+## Ajustes de interação: botão direito, texto e destaques
+
+- Segurar e arrastar com o botão direito ativa a mão temporariamente, inclusive sobre componentes. Ao soltar ou perder a captura/foco, a ferramenta anterior é restaurada. Clique direito sem movimento mantém o menu de contexto. A seleção em área continua no botão esquerdo.
+- Com Texto ativo, um clique no fundo abre a anotação focada. A ferramenta volta ao modo padrão ao iniciar a digitação; os dois cliques no fundo continuam criando estados nesse modo.
+- Executar, retomar ou avançar/voltar passos limpa a seleção de edição. Os destaques da simulação desaparecem 2,5 segundos após pausar ou terminar, incluindo o contorno de resultado do quadro. Aceito/Rejeitado e o histórico de passos continuam disponíveis; retomar reacende o estado atual.
