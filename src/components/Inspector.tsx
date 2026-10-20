@@ -1,10 +1,11 @@
 import { SlidersHorizontal, Trash2 } from "lucide-react";
 import { useEditor } from "../store";
 import { TransitionSymbolsInput } from "./TransitionSymbolsInput";
+import { automaticTypeHint } from "../automatonType";
+import { uppercaseStateInput } from "../stateLabel";
 export function Inspector() {
   const { doc, selection, commit, removeSelected } = useEditor(),
-    count =
-      selection.nodes.length + selection.edges.length + selection.notes.length;
+    count = Object.values(selection).reduce((sum, ids) => sum + ids.length, 0);
   const node =
     selection.nodes.length === 1
       ? doc.nodes.find((n) => n.id === selection.nodes[0])
@@ -39,21 +40,12 @@ export function Inspector() {
             })
           }
         />
-        <label className="field-label" htmlFor="mode">
-          TIPO DE AUTÔMATO
-        </label>
-        <select
-          id="mode"
-          value={doc.mode}
-          onChange={(e) =>
-            commit((d) => {
-              d.mode = e.target.value as "AFD" | "AFN";
-            })
-          }
-        >
-          <option value="AFD">AFD — Determinístico</option>
-          <option value="AFN">AFN — Não determinístico (ε)</option>
-        </select>
+        <div className="field-label">TIPO DE AUTÔMATO</div>
+        <div className="automatic-type" role="status" title={automaticTypeHint}>
+          <strong>{doc.mode}</strong>
+          <span>Identificado automaticamente</span>
+        </div>
+        <p className="field-hint">{automaticTypeHint}</p>
       </section>
       <section className="inspector-selection">
         <div className="section-heading">
@@ -71,6 +63,11 @@ export function Inspector() {
               key={node.id + node.label}
               maxLength={30}
               defaultValue={node.label}
+              onChange={(e) => {
+                if (!(e.nativeEvent as InputEvent).isComposing)
+                  uppercaseStateInput(e.currentTarget);
+              }}
+              onCompositionEnd={(e) => uppercaseStateInput(e.currentTarget)}
               onBlur={(e) =>
                 commit((d) => {
                   d.nodes.find((n) => n.id === node.id)!.label =
@@ -114,7 +111,6 @@ export function Inspector() {
             <TransitionSymbolsInput
               key={edge.id + edge.symbols.join(",")}
               initialValue={edge.symbols.join(", ")}
-              mode={doc.mode}
               onConfirm={(symbols) =>
                 commit((d) => {
                   const target = d.edges.find((x) => x.id === edge.id);
@@ -124,7 +120,7 @@ export function Inspector() {
               onCancel={() => {}}
             />
             <p className="field-hint">
-              Separe por vírgula: 0, 1. Use ε no AFN.
+              Separe por vírgula: 0, 1. Usar ε identifica o autômato como AFN.
               <br />
               Enter ou clique fora para confirmar.
             </p>
@@ -137,6 +133,17 @@ export function Inspector() {
               para movê-la.
             </p>
           </>
+        )}
+        {selection.tables.length > 0 && (
+          <p className="field-hint">
+            Dê dois cliques em uma célula para preencher. Arraste a tabela para
+            mover; use os botões sobre ela para ajustar linhas e colunas.
+          </p>
+        )}
+        {selection.strokes.length > 0 && (
+          <p className="field-hint">
+            Arraste o traço para mover. Delete exclui; Ctrl+Z desfaz.
+          </p>
         )}
         {count > 0 ? (
           <button className="danger-button" onClick={removeSelected}>

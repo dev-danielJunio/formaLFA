@@ -22,21 +22,8 @@ export function validate(doc: Automaton): string[] {
     if (!e.symbols.length || e.symbols.some((s) => Array.from(s).length !== 1))
       errors.push("Use símbolos de um caractere, separados por vírgula.");
   }
-  if (doc.mode === "AFD") {
-    if (doc.edges.some((e) => e.symbols.includes("ε")))
-      errors.push("AFDs não permitem ε. Troque o tipo para AFN.");
-    for (const n of doc.nodes) {
-      const seen = new Set<string>();
-      for (const e of doc.edges.filter((e) => e.source === n.id))
-        for (const s of e.symbols) {
-          if (seen.has(s))
-            errors.push(
-              `O estado ${n.label} tem mais de uma saída para “${s}”. Remova o símbolo repetido de uma das transições ou escolha AFN nas Propriedades.`,
-            );
-          seen.add(s);
-        }
-    }
-  }
+  // The graph determines determinism. A stale imported mode never blocks a
+  // valid ε-transition or branch; trace already tracks all possible states.
   return [...new Set(errors)];
 }
 // ε-closure: a visited set makes epsilon cycles finite, including self-loops.

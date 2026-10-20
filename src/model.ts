@@ -15,6 +15,13 @@ export type Edge = {
   loop?: { angle: number; size: number };
 };
 export type Note = Point & { id: string; text: string; scale?: number };
+export type StudyTable = Point & { id: string; cells: string[][] };
+export type InkStroke = Point & {
+  id: string;
+  color: string;
+  width: number;
+  points: Point[];
+};
 export type Automaton = {
   version: 1;
   title: string;
@@ -22,23 +29,43 @@ export type Automaton = {
   nodes: StateNode[];
   edges: Edge[];
   notes: Note[];
+  tables?: StudyTable[];
+  strokes?: InkStroke[];
 };
-export type Selection = { nodes: string[]; edges: string[]; notes: string[] };
+export type Selection = {
+  nodes: string[];
+  edges: string[];
+  notes: string[];
+  tables: string[];
+  strokes: string[];
+};
 export const emptySelection = (): Selection => ({
   nodes: [],
   edges: [],
   notes: [],
+  tables: [],
+  strokes: [],
 });
 export const uid = () => crypto.randomUUID();
 export const clone = <T>(value: T): T => structuredClone(value);
+export const createEmptyAutomaton = (): Automaton => ({
+  version: 1,
+  title: "Autômato sem título",
+  mode: "AFD",
+  nodes: [],
+  edges: [],
+  notes: [],
+  tables: [],
+  strokes: [],
+});
 export const example: Automaton = {
   version: 1,
   title: "Palavras que terminam em 01",
   mode: "AFD",
   nodes: [
-    { id: "q0", label: "q₀", x: 200, y: 280, initial: true, final: false },
-    { id: "q1", label: "q₁", x: 440, y: 280, initial: false, final: false },
-    { id: "q2", label: "q₂", x: 680, y: 280, initial: false, final: true },
+    { id: "q0", label: "Q₀", x: 200, y: 280, initial: true, final: false },
+    { id: "q1", label: "Q₁", x: 440, y: 280, initial: false, final: false },
+    { id: "q2", label: "Q₂", x: 680, y: 280, initial: false, final: true },
   ],
   edges: [
     { id: "e0", source: "q0", target: "q0", symbols: ["1"] },

@@ -12,7 +12,7 @@ export function labelSize(edge: Edge) {
     height: 28,
   };
 }
-export function edgeGeometry(edge: Edge, doc: Automaton) {
+export function edgeGeometry(edge: Edge, doc: Automaton, targetRadius = R + 3) {
   const a = doc.nodes.find((n) => n.id === edge.source)!,
     b = doc.nodes.find((n) => n.id === edge.target)!;
   let start: Point,
@@ -55,13 +55,13 @@ export function edgeGeometry(edge: Edge, doc: Automaton) {
         mul(perp, edge.curve?.normal ?? bend),
       ),
     );
-    const toward = (p: Point, fallback: Point) => {
+    const toward = (p: Point, fallback: Point, radius = R + 3) => {
       let v = { x: control.x - p.x, y: control.y - p.y };
       if (Math.hypot(v.x, v.y) < 0.001) v = fallback;
-      return add(p, mul(unit(v), R + 3));
+      return add(p, mul(unit(v), radius));
     };
     start = toward(a, axis);
-    end = toward(b, mul(axis, -1));
+    end = toward(b, mul(axis, -1), targetRadius);
     midpoint = mul(add(add(start, end), mul(control, 2)), 0.25);
     // B'(1/2) = end - start. Offset along its normal, away from the bow.
     const tangent = unit({ x: end.x - start.x, y: end.y - start.y });

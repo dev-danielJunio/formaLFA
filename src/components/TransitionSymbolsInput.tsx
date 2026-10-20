@@ -1,16 +1,13 @@
 import { useLayoutEffect, useId, useRef, useState } from "react";
-import type { Automaton } from "../model";
 import { parseSymbols } from "../symbols";
 
 export function TransitionSymbolsInput({
   initialValue,
-  mode,
   inline = false,
   onConfirm,
   onCancel,
 }: {
   initialValue: string;
-  mode: Automaton["mode"];
   inline?: boolean;
   onConfirm: (symbols: string[]) => void;
   onCancel: () => void;
@@ -45,7 +42,7 @@ export function TransitionSymbolsInput({
       return;
     }
     try {
-      const symbols = parseSymbols(value, mode);
+      const symbols = parseSymbols(value);
       completed.current = true;
       onConfirm(symbols);
     } catch (err) {

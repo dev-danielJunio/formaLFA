@@ -56,7 +56,7 @@ describe("organização de autômatos importados", () => {
           ),
         ).toBeGreaterThan(32);
     expect(parseProject(JSON.stringify(result))).toEqual(
-      JSON.parse(JSON.stringify(result)),
+      { ...JSON.parse(JSON.stringify(result)), mode: "AFD" },
     );
   });
   it("distribui loops no mesmo estado e afasta anotações", () => {

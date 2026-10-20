@@ -19,7 +19,8 @@ import { Inspector } from "./components/Inspector";
 import { useSimulation } from "./useSimulation";
 import { exportProject } from "./io";
 import { ImportDialog } from "./components/ImportDialog";
-import { clone, emptySelection, example } from "./model";
+import { clone, createEmptyAutomaton, emptySelection, example } from "./model";
+import { automaticTypeHint } from "./automatonType";
 export default function App() {
   const { doc, replace, undo, redo, removeSelected, select } = useEditor(),
     sim = useSimulation();
@@ -27,6 +28,7 @@ export default function App() {
     [menu, setMenu] = useState(false),
     [fullscreen, setFullscreen] = useState(false),
     [panelOpen, setPanelOpen] = useState(true),
+    [testsHidden, setTestsHidden] = useState(false),
     [dark, setDark] = useState(() => {
       try {
         return localStorage.getItem("forma-theme") === "dark";
@@ -40,6 +42,7 @@ export default function App() {
     [fitRequest, setFitRequest] = useState(0);
   const helpDialog = useRef<HTMLDialogElement>(null);
   const openProperties = () => {
+    setTestsHidden(false);
     setTab("properties");
     setPanelOpen(true);
   };
@@ -100,6 +103,8 @@ export default function App() {
           nodes: doc.nodes.map((n) => n.id),
           edges: doc.edges.map((e) => e.id),
           notes: doc.notes.map((n) => n.id),
+          tables: (doc.tables ?? []).map((t) => t.id),
+          strokes: (doc.strokes ?? []).map((s) => s.id),
         });
       } else if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
@@ -123,7 +128,7 @@ export default function App() {
   };
   return (
     <div
-      className={`app${fullscreen ? " is-fullscreen" : ""}${!panelOpen ? " panel-collapsed" : ""}`}
+      className={`app${fullscreen ? " is-fullscreen" : ""}${!panelOpen || testsHidden ? " panel-collapsed" : ""}`}
     >
       <header className="topbar">
         <a
@@ -192,14 +197,7 @@ export default function App() {
                   </button>
                   <button
                     onClick={() => {
-                      replace({
-                        version: 1,
-                        title: "Autômato sem título",
-                        mode: "AFD",
-                        nodes: [],
-                        edges: [],
-                        notes: [],
-                      });
+                      replace(createEmptyAutomaton());
                       setMenu(false);
                       openProperties();
                       setToast("Novo projeto. Ctrl+Z restaura o anterior.");
@@ -253,13 +251,14 @@ export default function App() {
               <Workflow size={18} />
             </span>
             <strong>Editor de autômatos</strong>
-            <button
+            <span
               className="badge"
-              title="Alterar tipo nas propriedades"
-              onClick={openProperties}
+              title={automaticTypeHint}
+              role="status"
+              aria-label={`Tipo identificado automaticamente: ${doc.mode}`}
             >
               {doc.mode}
-            </button>
+            </span>
             <div className="bar-right">
               <span>{doc.nodes.length} estados</span>
               <span>·</span>
@@ -269,7 +268,13 @@ export default function App() {
           <Canvas
             fullscreen={fullscreen}
             onToggleFullscreen={() => setFullscreen((value) => !value)}
-            quickTest={<QuickTest sim={sim} />}
+            quickTest={
+              testsHidden ? null : (
+                <QuickTest sim={sim} onHide={() => setTestsHidden(true)} />
+              )
+            }
+            testsHidden={testsHidden}
+            onToggleTests={() => setTestsHidden((hidden) => !hidden)}
             fitRequest={fitRequest}
             pulse={sim.index}
             active={sim.highlight ? (sim.frame?.active ?? []) : []}
@@ -277,7 +282,11 @@ export default function App() {
             onSelection={() => setTab("properties")}
           />
         </section>
-        <section className="bottom-panel" aria-label="Simulação e propriedades">
+        <section
+          className="bottom-panel"
+          aria-label="Simulação e propriedades"
+          hidden={testsHidden}
+        >
           <div className="panel-heading">
             <div
               className="side-tabs"
@@ -348,6 +357,16 @@ export default function App() {
         </div>
         <ol>
           <li>
+            Selecione Tabela e clique no quadro. Dê dois cliques nas células
+            para preencher; selecione a tabela para adicionar ou remover linhas
+            e colunas.
+          </li>
+          <li>
+            Selecione Canetinha para escrever à mão livre. Escolha a cor e a
+            espessura no painel da caneta. Clique novamente no ícone para voltar
+            a selecionar.
+          </li>
+          <li>
             Dê dois cliques no fundo para criar um estado. Para inserir uma
             anotação, escolha Texto e clique uma vez no fundo.
           </li>
@@ -357,8 +376,8 @@ export default function App() {
           </li>
           <li>
             Dê dois cliques em um estado para torná-lo de aceitação (círculo
-            duplo). Repita para voltar ao normal. Defina o inicial em
-            Propriedades, abaixo do editor.
+            duplo). Repita para voltar ao normal. Para definir o inicial, clique
+            com o botão direito no estado e escolha Definir como estado inicial.
           </li>
           <li>
             Abra Simular, escreva a palavra e execute. Campo vazio testa ε.
@@ -371,6 +390,10 @@ export default function App() {
         <p>
           Clique com o botão direito em um elemento para editar ou excluir. Em
           telas de toque, mantenha o dedo sobre o estado para abrir o menu.
+        </p>
+        <p>
+          Com um único estado selecionado e o foco no quadro, comece a digitar
+          para substituir seu nome. Enter ou clique fora confirma; Esc cancela.
         </p>
         <p>
           Texto desativa automaticamente ao abrir a anotação para digitar.

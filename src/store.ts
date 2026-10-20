@@ -1,8 +1,10 @@
 import { create } from "zustand";
+import { detectAutomatonType } from "./automatonType";
+import { normalizeStateLabel } from "./stateLabel";
 import {
   clone,
   emptySelection,
-  example,
+  createEmptyAutomaton,
   uid,
   type Automaton,
   type Point,
@@ -22,10 +24,11 @@ type EditorStore = {
   removeSelected: () => void;
   addNode: (point: Point) => void;
   addNote: (point: Point) => void;
+  setInitialNode: (id: string) => void;
 };
 // Only committed documents enter history. Pointer movement stays in Canvas local state.
 export const useEditor = create<EditorStore>((set, get) => ({
-  doc: clone(example),
+  doc: createEmptyAutomaton(),
   past: [],
   future: [],
   selection: emptySelection(),
@@ -34,6 +37,9 @@ export const useEditor = create<EditorStore>((set, get) => ({
     set((s) => {
       const next = clone(s.doc);
       edit(next);
+      for (const node of next.nodes)
+        node.label = normalizeStateLabel(node.label);
+      next.mode = detectAutomatonType(next);
       if (JSON.stringify(next) === JSON.stringify(s.doc)) return s;
       return {
         doc: next,
@@ -43,10 +49,21 @@ export const useEditor = create<EditorStore>((set, get) => ({
       };
     }),
   replace: (doc) => {
-    get().commit((d) => Object.assign(d, clone(doc)));
+    get().commit((d) =>
+      Object.assign(d, clone(doc), {
+        tables: clone(doc.tables ?? []),
+        strokes: clone(doc.strokes ?? []),
+      }),
+    );
     set({ selection: emptySelection() });
   },
   select: (selection) => set({ selection }),
+  setInitialNode: (id) => {
+    if (!get().doc.nodes.some((node) => node.id === id)) return;
+    get().commit((doc) => {
+      for (const node of doc.nodes) node.initial = node.id === id;
+    });
+  },
   undo: () =>
     set((s) =>
       s.past.length
@@ -75,11 +92,11 @@ export const useEditor = create<EditorStore>((set, get) => ({
     const id = uid();
     get().commit((d) => {
       let i = d.nodes.length;
-      while (d.nodes.some((n) => n.label === `q${i}`)) i++;
+      while (d.nodes.some((n) => normalizeStateLabel(n.label) === `Q${i}`)) i++;
       d.nodes.push({
         ...p,
         id,
-        label: `q${i}`,
+        label: `Q${i}`,
         initial: d.nodes.length === 0,
         final: false,
       });
@@ -104,6 +121,8 @@ export const useEditor = create<EditorStore>((set, get) => ({
           !sel.nodes.includes(e.target),
       );
       d.notes = d.notes.filter((n) => !sel.notes.includes(n.id));
+      d.tables = d.tables?.filter((t) => !sel.tables.includes(t.id));
+      d.strokes = d.strokes?.filter((s) => !sel.strokes.includes(s.id));
     });
     set({ selection: emptySelection() });
   },

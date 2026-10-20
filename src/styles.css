@@ -926,8 +926,61 @@ kbd {
   fill: none;
   stroke: var(--accent);
   stroke-width: 2;
-  stroke-dasharray: 6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.65;
   pointer-events: none;
+}
+.connection-draft.is-snapped {
+  opacity: 1;
+}
+.connection-glow {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 7;
+  opacity: 0.08;
+  pointer-events: none;
+}
+.state.connection-target .state-body {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+.state.connection-target .state-halo {
+  opacity: 1;
+}
+.canvas:focus,
+.canvas:focus-visible {
+  outline: none;
+}
+.state-name-editor {
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.state-name-editor input,
+.state-name-editor input:focus {
+  pointer-events: auto;
+  user-select: text;
+  padding: 0;
+  margin: 0;
+  height: 28px;
+  max-width: 100%;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  outline: none;
+  box-shadow: none;
+  color: var(--ink);
+  caret-color: var(--accent);
+  text-align: center;
+  font:
+    22px / 28px ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+}
+[data-theme="dark"] .state-name-editor input {
+  color: #e4dfff;
 }
 .marquee {
   fill: #705be518;
@@ -1596,6 +1649,10 @@ kbd {
   padding: 10px 12px;
   font-size: 14px;
 }
+.state-context-menu.state-menu {
+  width: 256px;
+  max-width: calc(100% - 16px);
+}
 .state-context-menu .delete-state {
   color: #d55e6a;
 }
@@ -1887,6 +1944,28 @@ kbd {
 #panel-content[hidden] {
   display: none;
 }
+.bottom-panel[hidden] {
+  display: none;
+}
+.automatic-type {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 0;
+}
+.automatic-type strong {
+  color: var(--accent);
+}
+.automatic-type span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.quick-test .quick-hide {
+  min-height: 26px;
+  width: 26px;
+  padding: 4px;
+  color: var(--muted);
+}
 .app.panel-collapsed {
   height: 100dvh;
   min-height: 720px;
@@ -1995,5 +2074,131 @@ kbd {
   }
   .is-fullscreen .canvas-wrap .zoom-controls {
     top: 65px;
+  }
+}
+
+.study-table {
+  cursor: move;
+}
+.table-frame {
+  fill: var(--panel);
+  stroke: var(--line);
+  stroke-width: 1.5;
+}
+.study-table.selected .table-frame {
+  stroke: var(--accent);
+  stroke-width: 4;
+}
+.table-title {
+  fill: var(--muted);
+  font:
+    12px ui-sans-serif,
+    sans-serif;
+  pointer-events: none;
+}
+.table-cell {
+  fill: var(--panel);
+  stroke: var(--line);
+}
+.table-header {
+  fill: color-mix(in srgb, var(--accent) 12%, var(--panel));
+}
+.table-cell-text {
+  fill: var(--ink);
+  font:
+    13px Arial,
+    sans-serif;
+  pointer-events: none;
+}
+.table-actions {
+  display: flex;
+  gap: 4px;
+  width: max-content;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--ink);
+}
+.table-actions button {
+  font-size: 11px;
+  min-height: 28px;
+  padding: 4px 8px;
+}
+.table-cell-input {
+  width: 100%;
+  height: 100%;
+  border: 2px solid var(--accent);
+  border-radius: 0;
+  padding: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font:
+    13px Arial,
+    sans-serif;
+}
+.ink-stroke {
+  cursor: move;
+}
+.canvas.tool-pen,
+.canvas.tool-pen * {
+  cursor: crosshair;
+}
+.canvas.tool-pen .anchor,
+.canvas.tool-pen .note-resize {
+  visibility: hidden;
+}
+.pen-options {
+  position: absolute;
+  z-index: 4;
+  top: 58px;
+  left: 14px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  max-width: calc(100% - 28px);
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px #0002;
+  font-size: 12px;
+}
+.pen-options label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pen-options input {
+  width: 85px;
+  accent-color: var(--accent);
+}
+.pen-width {
+  min-width: 28px;
+  font-variant-numeric: tabular-nums;
+}
+.pen-palette {
+  display: flex;
+  gap: 6px;
+}
+.pen-palette button {
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid #94a3b8;
+}
+.pen-palette button[aria-pressed="true"] {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.is-fullscreen .pen-options {
+  top: 70px;
+}
+@media (max-width: 650px) {
+  .is-fullscreen .pen-options {
+    top: 112px;
   }
 }

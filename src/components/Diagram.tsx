@@ -10,6 +10,8 @@ export function Diagram({
   pulse = 0,
   editingEdge,
   editingNote,
+  editingNode,
+  connectionTarget,
 }: {
   doc: Automaton;
   selection?: Selection;
@@ -19,6 +21,8 @@ export function Diagram({
   pulse?: number;
   editingEdge?: string;
   editingNote?: string;
+  editingNode?: string;
+  connectionTarget?: string;
 }) {
   return (
     <>
@@ -145,7 +149,7 @@ export function Diagram({
           key={n.id}
           data-node={n.id}
           transform={`translate(${n.x} ${n.y})`}
-          className={`state ${selection?.nodes.includes(n.id) ? "selected" : ""} ${active.includes(n.id) ? "active" : ""}`}
+          className={`state ${selection?.nodes.includes(n.id) ? "selected" : ""} ${active.includes(n.id) ? "active" : ""} ${connectionTarget === n.id ? "connection-target" : ""}`}
         >
           {n.initial && (
             <path
@@ -157,7 +161,11 @@ export function Diagram({
           <circle className="state-halo" r={R + 8} />
           <circle className="state-body" r={R} />
           {n.final && <circle className="state-inner" r={R - 6} />}
-          <text textAnchor="middle" dy="7">
+          <text
+            textAnchor="middle"
+            dy="7"
+            visibility={editingNode === n.id ? "hidden" : undefined}
+          >
             {n.label}
           </text>
           {interactive &&

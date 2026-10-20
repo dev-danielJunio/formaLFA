@@ -66,7 +66,7 @@ describe("matemática de autômatos", () => {
     expect(trace(d, "😀")).toHaveLength(2);
     expect(trace(d, "😀").at(-1)!.status).toBe("accepted");
   });
-  it("impede ambiguidades e epsilon em AFD", () => {
+  it("processa ramificação e epsilon mesmo com tipo declarado desatualizado", () => {
     const d = clone(example);
     d.edges.push({
       id: "bad",
@@ -74,8 +74,8 @@ describe("matemática de autômatos", () => {
       target: "q2",
       symbols: ["0", "ε"],
     });
-    expect(validate(d)).toHaveLength(2);
-    expect(() => trace(d, "0")).toThrow();
+    expect(validate(d)).toHaveLength(0);
+    expect(trace(d, "0").at(-1)?.status).toBe("accepted");
   });
   it("exige exatamente um estado inicial", () => {
     const d = clone(example);
@@ -84,6 +84,38 @@ describe("matemática de autômatos", () => {
   });
 });
 describe("histórico transacional", () => {
+  it("troca o estado inicial em uma ação reversível", () => {
+    const s = useEditor.getState();
+    s.setInitialNode("q2");
+    expect(
+      useEditor
+        .getState()
+        .doc.nodes.filter((n) => n.initial)
+        .map((n) => n.id),
+    ).toEqual(["q2"]);
+    expect(useEditor.getState().past).toHaveLength(1);
+    s.undo();
+    expect(
+      useEditor
+        .getState()
+        .doc.nodes.filter((n) => n.initial)
+        .map((n) => n.id),
+    ).toEqual(["q0"]);
+    s.redo();
+    expect(
+      useEditor
+        .getState()
+        .doc.nodes.filter((n) => n.initial)
+        .map((n) => n.id),
+    ).toEqual(["q2"]);
+  });
+  it("não altera o projeto ao escolher o inicial atual ou um ID inexistente", () => {
+    const s = useEditor.getState();
+    s.setInitialNode("q0");
+    s.setInitialNode("inexistente");
+    expect(useEditor.getState().past).toHaveLength(0);
+    expect(useEditor.getState().doc).toEqual(example);
+  });
   beforeEach(() =>
     useEditor.setState({
       doc: clone(example),
@@ -116,7 +148,7 @@ describe("histórico transacional", () => {
   });
   it("exclusão remove arestas incidentes e undo restaura tudo", () => {
     const s = useEditor.getState();
-    s.select({ nodes: ["q1"], edges: [], notes: [] });
+    s.select({ nodes: ["q1"], edges: [], notes: [], tables: [], strokes: [] });
     s.removeSelected();
     expect(
       useEditor

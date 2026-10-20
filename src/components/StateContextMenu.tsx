@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, ArrowRightToLine } from "lucide-react";
+import { normalizeStateLabel, uppercaseStateInput } from "../stateLabel";
 
 export function StateContextMenu({
   x,
@@ -7,6 +8,8 @@ export function StateContextMenu({
   onRename,
   onDelete,
   onClose,
+  onSetInitial,
+  isInitial = false,
   label = "Opções do estado",
   editLabel = "Renomear",
 }: {
@@ -15,6 +18,8 @@ export function StateContextMenu({
   onRename: () => void;
   onDelete: () => void;
   onClose: () => void;
+  onSetInitial?: () => void;
+  isInitial?: boolean;
   label?: string;
   editLabel?: string;
 }) {
@@ -32,7 +37,7 @@ export function StateContextMenu({
   return (
     <div
       ref={ref}
-      className="state-context-menu"
+      className={`state-context-menu${onSetInitial ? " state-menu" : ""}`}
       role="menu"
       aria-label={label}
       style={{ left: x, top: y }}
@@ -49,7 +54,9 @@ export function StateContextMenu({
         }
         if (event.key === "ArrowDown" || event.key === "ArrowUp") {
           event.preventDefault();
-          const buttons = Array.from(ref.current!.querySelectorAll("button"));
+          const buttons = Array.from(
+            ref.current!.querySelectorAll("button"),
+          ).filter((button) => !button.disabled);
           const current = buttons.indexOf(
             document.activeElement as HTMLButtonElement,
           );
@@ -68,53 +75,64 @@ export function StateContextMenu({
         <Trash2 size={16} />
         Excluir
       </button>
+      {onSetInitial && (
+        <button role="menuitem" disabled={isInitial} onClick={onSetInitial}>
+          <ArrowRightToLine size={16} />
+          {isInitial ? "Estado inicial" : "Definir como estado inicial"}
+        </button>
+      )}
     </div>
   );
 }
 
 export function StateNameInput({
   name,
+  initialText,
   onConfirm,
   onCancel,
 }: {
   name: string;
-  onConfirm: (name: string) => void;
-  onCancel: () => void;
+  initialText?: string;
+  onConfirm: (name: string, viaBlur: boolean) => void;
+  onCancel: (viaBlur: boolean) => void;
 }) {
-  const [value, setValue] = useState(name),
-    [error, setError] = useState(false);
+  const [value, setValue] = useState(() =>
+    normalizeStateLabel(initialText ?? name),
+  );
   const input = useRef<HTMLInputElement>(null),
     done = useRef(false);
   useLayoutEffect(() => {
     input.current?.focus({ preventScroll: true });
-    input.current?.select();
+    if (initialText === undefined) input.current?.select();
+    else input.current?.setSelectionRange(value.length, value.length);
   }, []);
-  const save = () => {
+  const save = (viaBlur = false) => {
     if (done.current) return;
-    if (!value.trim()) {
-      setError(true);
-      return;
-    }
     done.current = true;
-    onConfirm(value.trim());
+    if (value.trim()) onConfirm(value.trim(), viaBlur);
+    else onCancel(viaBlur);
   };
   return (
     <div
-      className="inline-symbol-editor"
+      className="state-name-editor"
       onPointerDown={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
     >
       <input
         ref={input}
         aria-label="Nome do estado"
-        aria-invalid={error}
         value={value}
+        style={{ width: `${Math.max(2, Array.from(value).length) + 0.5}ch` }}
         maxLength={30}
         onChange={(e) => {
-          setValue(e.target.value);
-          setError(false);
+          setValue(
+            (e.nativeEvent as InputEvent).isComposing
+              ? e.target.value
+              : uppercaseStateInput(e.currentTarget),
+          );
         }}
-        onBlur={save}
+        onCompositionEnd={(e) => setValue(uppercaseStateInput(e.currentTarget))}
+        onBlur={() => save(true)}
         onKeyDown={(e) => {
           e.stopPropagation();
           if (e.nativeEvent.isComposing) return;
@@ -125,15 +143,10 @@ export function StateNameInput({
           if (e.key === "Escape") {
             e.preventDefault();
             done.current = true;
-            onCancel();
+            onCancel(false);
           }
         }}
       />
-      {error && (
-        <p className="symbol-error" role="alert">
-          Digite um nome.
-        </p>
-      )}
     </div>
   );
 }

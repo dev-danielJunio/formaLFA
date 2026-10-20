@@ -1,7 +1,13 @@
 import { Check, Pause, Play, TriangleAlert, X } from "lucide-react";
 import type { Simulation } from "../useSimulation";
 
-export function QuickTest({ sim }: { sim: Simulation }) {
+export function QuickTest({
+  sim,
+  onHide,
+}: {
+  sim: Simulation;
+  onHide: () => void;
+}) {
   const status = sim.frame?.status;
   const invalid = sim.errors.length > 0;
   return (
@@ -68,6 +74,15 @@ export function QuickTest({ sim }: { sim: Simulation }) {
           </span>
         ) : null}
       </span>
+      <button
+        type="button"
+        className="quick-hide"
+        aria-label="Ocultar testes e ampliar quadro"
+        title="Ocultar testes e ampliar quadro"
+        onClick={onHide}
+      >
+        <X size={14} />
+      </button>
     </form>
   );
 }

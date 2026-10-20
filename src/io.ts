@@ -1,4 +1,8 @@
 import type { Automaton } from "./model";
+import { detectAutomatonType } from "./automatonType";
+import { normalizeStateLabel } from "./stateLabel";
+import { parseStudyFields, studySvg, drawStudy } from "./studyIO";
+import { studyBounds } from "./studyTools";
 export function parseProject(text: string): Automaton {
   if (new TextEncoder().encode(text).length > 2_000_000)
     throw new Error("O arquivo excede 2 MB.");
@@ -8,7 +12,7 @@ export function parseProject(text: string): Automaton {
     d.version !== 1 ||
     typeof d.title !== "string" ||
     d.title.length > 120 ||
-    !["AFD", "AFN"].includes(d.mode) ||
+    (d.mode !== undefined && !["AFD", "AFN"].includes(d.mode)) ||
     !Array.isArray(d.nodes) ||
     !Array.isArray(d.edges) ||
     !Array.isArray(d.notes)
@@ -88,11 +92,12 @@ export function parseProject(text: string): Automaton {
   // Pick known fields: never merge arbitrary imported keys into application state.
   return {
     version: 1,
+    ...parseStudyFields(d, ids),
     title: d.title,
-    mode: d.mode,
+    mode: detectAutomatonType(d),
     nodes: d.nodes.map((n: Automaton["nodes"][number]) => ({
       id: n.id,
-      label: n.label,
+      label: normalizeStateLabel(n.label),
       x: n.x,
       y: n.y,
       initial: n.initial,
@@ -140,6 +145,7 @@ const esc = (s: string) =>
 import { edgeGeometry, labelSize } from "./geometry";
 export function toSvg(doc: Automaton) {
   const pts = [
+    ...studyBounds(doc),
     ...doc.edges.flatMap((edge) => edgeGeometry(edge, doc).bounds),
     ...doc.nodes.flatMap((n) => [
       { x: n.x - 100, y: n.y - 130 },
@@ -188,7 +194,7 @@ export function toSvg(doc: Automaton) {
           )
           .join("")}</text>`,
     )
-    .join("")}</g></svg>`;
+    .join("")}${studySvg(doc, esc)}</g></svg>`;
 }
 export async function exportProject(
   doc: Automaton,
@@ -290,6 +296,7 @@ export async function exportProject(
         ctx.fillText(line, note.x, note.y + i * 24 * (note.scale ?? 1)),
       );
   }
+  drawStudy(ctx, doc);
   const blob = await new Promise<Blob>((resolve, reject) => {
     const timer = setTimeout(
       () =>

@@ -6,9 +6,13 @@ export const importTemplate = {
     tarefa:
       "Gere um autômato para o enunciado do usuário usando esta estrutura. Responda com JSON válido, sem comentários nem blocos Markdown. Substitua os dados do exemplo; o campo _guia_para_ia é opcional e ignorado na importação.",
     campos: {
+      tables:
+        "Opcional: tabelas de estudo, array de {id, x, y, cells}. cells é uma matriz retangular de 2 a 40 linhas e 1 a 12 colunas; cada célula é uma string de até 200 caracteres. A primeira linha é o cabeçalho. Não altera a linguagem do autômato.",
+      strokes:
+        "Opcional: traços de canetinha, array de {id, x, y, color, width, points}. color é hexadecimal #RRGGBB, width de 1 a 12, points contém de 1 a 4000 pontos {x,y} relativos à origem do traço. IDs são únicos no projeto inteiro.",
       version: "Obrigatório: número 1.",
       title: "Obrigatório: nome do projeto, string de até 120 caracteres.",
-      mode: 'Obrigatório: "AFD" ou "AFN".',
+      mode: 'Opcional: "AFD" ou "AFN". O sistema recalcula o tipo automaticamente pelas transições na importação e na edição.',
       nodes:
         "Obrigatório: array de estados. Cada estado tem id (string única de 1 a 120 caracteres), label (nome de 1 a 30 caracteres), x e y (números), initial e final (booleanos true/false).",
       edges:

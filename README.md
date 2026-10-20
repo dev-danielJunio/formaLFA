@@ -1,5 +1,14 @@
 # Forma — Laboratório de Autômatos
 
+## Projeto principal — consolidado em 17/10/2026
+
+Raiz definida pelo usuário para esta e futuras atualizações:
+`C:\Users\conta\Documents\Projetos\faculdade\LFA\formaLFA`.
+
+Execute os comandos abaixo nesta raiz. O código atual está em `src/`; as cópias `work/ux-*` são histórico. A versão consolidada inclui início vazio, estados em maiúsculas, identificação automática AFD/AFN, prévia de conexões com desvio de obstáculos, edição inline, tabelas, canetinha e ocultação da área de testes. A raiz anterior foi preservada em `work/backup-raiz-20261017-054147/`.
+
+Para novas alterações, siga [AGENTS.md](AGENTS.md). Preserve sessões de edição abertas e use uma porta livre para revisão. Após compilar, `npm run preview -- --port 5178 --strictPort` serve o build da raiz sem HMR; se a porta estiver ocupada, escolha outra.
+
 ## Executar
 
 Requer Node.js 22 ou superior e npm.
@@ -72,7 +81,7 @@ O fluxo de conexão é:
 
 Transições em sentidos opostos usam curvas separadas; loops usam Bézier cúbica. Conectar novamente o mesmo par agrupa os símbolos na aresta existente. Áreas transparentes de 18 px facilitam selecionar as linhas.
 
-Arrastar no fundo com o botão esquerdo ou direito cria a seleção retangular. Estados devem caber por inteiro; arestas são verificadas pelos limites reais do grupo SVG, incluindo sua curva e rótulo. As notas são selecionadas pela posição de origem. Arrastar um estado ou nota selecionada move o conjunto, mantendo as arestas ligadas aos estados. Ctrl/Cmd/Shift + clique altera a seleção.
+Arrastar no fundo com o botão esquerdo cria a seleção retangular. Segurar e arrastar com o botão direito move o quadro; um clique direito sem arraste abre o menu do componente. Arrastar um estado ou nota selecionada move o conjunto, mantendo as arestas ligadas aos estados. Ctrl/Cmd/Shift + clique altera a seleção.
 
 O snap usa grade de 20 unidades e detecta alinhamento próximo a estados não selecionados. Guias horizontais/verticais aparecem durante o movimento. O botão no rodapé permite desativar o snap.
 
@@ -88,7 +97,7 @@ Sᵢ₊₁ = E( união de δ(q, aᵢ₊₁) para todo q em Sᵢ )
 aceita ⇔ após consumir toda a entrada, Sₙ ∩ F ≠ ∅
 ```
 
-O fecho-ε usa uma fila e um conjunto de visitados. Ciclos e loops ε sempre terminam. No AFD, o mesmo algoritmo opera com no máximo um estado ativo; a validação bloqueia ε e saídas ambíguas. Uma transição ausente equivale à rejeição, sem exigir um estado sumidouro explícito. No AFN, qualquer ramo final aceita, mas apenas depois de consumir toda a palavra.
+O fecho-ε usa uma fila e um conjunto de visitados. Ciclos e loops ε sempre terminam. O tipo é identificado automaticamente pelas transições: ε ou destinos diferentes para o mesmo símbolo e origem indicam AFN; nos demais casos, AFD. Uma transição ausente equivale à rejeição (AFD parcial), sem exigir um estado sumidouro explícito. No AFN, qualquer ramo final aceita, mas apenas depois de consumir toda a palavra.
 
 Cada `Frame` guarda o número de símbolos consumidos, o conjunto ativo, as arestas percorridas, o símbolo lido e o resultado. Voltar um passo consulta o frame anterior, sem tentar inverter uma transição não determinística. As transições ε são agrupadas no frame inicial ou no frame do símbolo que as alcançou; não há um clique separado para cada ε.
 
@@ -100,7 +109,7 @@ O primeiro avanço prepara o frame inicial; os seguintes consomem um símbolo po
 
 | Arquivo                                     | Responsabilidade                                                      |
 | ------------------------------------------- | --------------------------------------------------------------------- |
-| `src/model.ts`                              | Tipos e exemplo inicial                                               |
+| `src/model.ts`                              | Tipos, documento vazio e exemplo opcional                              |
 | `src/store.ts`                              | Documento, seleção e undo/redo                                        |
 | `src/geometry.ts`                           | Curvas, loops e rótulos                                               |
 | `src/components/Canvas.tsx`                 | Gestos, captura de ponteiro, snap, pan e zoom                         |
@@ -122,7 +131,7 @@ SVG e PNG usam fundo transparente e removem grade, seleção, âncoras e destaqu
 
 ## Verificação
 
-Foram aprovados 31 testes automatizados, incluindo 10 casos de símbolos separados por vírgula e 7 de geometria. Um dos testes verifica exaustivamente as 255 palavras binárias de comprimento 0 a 7, comparando o resultado com `endsWith('01')`. A suíte também cobre palavra vazia, Unicode, ciclos ε, ramificações, transições inexistentes, AFD inválido, undo/redo, exclusão de arestas incidentes e importação/exportação.
+A suíte consolidada contém 73 testes automatizados. Um dos testes verifica exaustivamente as 255 palavras binárias de comprimento 0 a 7, comparando o resultado com `endsWith('01')`. A suíte cobre palavras vazias, Unicode, ciclos ε, ramificações, classificação automática, transições ausentes, undo/redo, geometria, rotas de conexão, tabelas, canetinha e importação/exportação. `npm test` ignora revisões e backups em `work/`.
 
 No navegador foram verificados: aceitação e rejeição; retorno de passo; criação por duplo clique; conexão sem Shift; loop; seleção de 11 elementos; movimento coletivo e desfazer; notas multilinha; tema escuro; e layout em 1440 e 390 pixels, sem rolagem horizontal no tamanho menor. A exportação SVG exibiu confirmação de geração. A última revisão visual/baixamento do PNG foi interrompida por um timeout da ferramenta de navegador; não se afirma que o arquivo PNG final foi baixado e inspecionado.
 
@@ -166,7 +175,7 @@ Verificado no navegador nesta revisão: arraste direto da curva, ajuste de loop,
 ## Revisão de usabilidade v1.4
 
 - Clique simples no símbolo abre seu campo focado. O rótulo tem prioridade de clique sobre as linhas; o arraste da própria linha altera a curvatura, sem círculos de controle sobre o texto.
-- `1, 0`, `1 , 0` e espaços não separáveis são normalizados para dois símbolos. Se um AFD tiver outra saída com o mesmo símbolo, a simulação explica o conflito e como resolvê-lo; isso independe dos espaços da lista.
+- `1, 0`, `1 , 0` e espaços não separáveis são normalizados para dois símbolos. Se um estado passar a ter destinos diferentes para o mesmo símbolo, o tipo muda automaticamente para AFN; a simulação acompanha os ramos.
 - Estado e Texto permanecem ativos até a troca manual de ferramenta, inclusive ao mover estados. A barra agora fica acima do canvas, sem ocupar sua área de desenho. O título decorativo foi removido.
 - Inserir Texto abre `NoteInput.tsx`, com foco imediato no canvas. Enter quebra a linha, Ctrl/Cmd+Enter ou clique fora salva, Esc cancela. Criação e conteúdo formam uma única ação de histórico. Dois cliques reabrem o texto; na ferramenta Texto, um clique é suficiente.
 - O menu de botão direito também funciona nas anotações (Editar texto/Excluir) e transições (Editar símbolos/Excluir). A exclusão continua reversível.
@@ -188,3 +197,9 @@ A ferramenta Arrastar quadro move a visualização inteira, inclusive quando o g
 - Segurar e arrastar com o botão direito ativa a mão temporariamente, inclusive sobre componentes. Ao soltar ou perder a captura/foco, a ferramenta anterior é restaurada. Clique direito sem movimento mantém o menu de contexto. A seleção em área continua no botão esquerdo.
 - Com Texto ativo, um clique no fundo abre a anotação focada. A ferramenta volta ao modo padrão ao iniciar a digitação; os dois cliques no fundo continuam criando estados nesse modo.
 - Executar, retomar ou avançar/voltar passos limpa a seleção de edição. Os destaques da simulação desaparecem 2,5 segundos após pausar ou terminar, incluindo o contorno de resultado do quadro. Aceito/Rejeitado e o histórico de passos continuam disponíveis; retomar reacende o estado atual.
+
+## Renomeação direta e estado inicial
+
+Clique em um estado e comece a digitar para substituir o nome no próprio quadro. O primeiro caractere é preservado; Enter ou clique fora confirma em uma única ação de histórico, e Esc cancela. A digitação em outros campos e os atalhos Ctrl/Cmd/Alt permanecem independentes.
+
+O menu do botão direito dos estados inclui Definir como estado inicial. A ação desmarca o inicial anterior e pode ser desfeita/refeita com Ctrl+Z/Ctrl+Y.

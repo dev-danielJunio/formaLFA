@@ -1,6 +1,7 @@
 import {
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -16,7 +17,11 @@ import {
   Plus,
   Redo2,
   Type,
+  Table2,
+  Pencil,
   Undo2,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { useEditor } from "../store";
 import {
@@ -27,6 +32,7 @@ import {
   type Note,
   type Point,
   type Selection,
+  type InkStroke,
 } from "../model";
 import { Diagram } from "./Diagram";
 import { edgeGeometry, labelSize, reshapeEdge, R } from "../geometry";
@@ -35,8 +41,27 @@ import { StateContextMenu, StateNameInput } from "./StateContextMenu";
 import { NoteInput } from "./NoteInput";
 import { NOTE_TOP, noteLayout, resizeNote } from "../noteLayout";
 import { curveSamples } from "../autoLayout";
-export type Tool = "select" | "note" | "pan";
+import { renameCharacter } from "../keyboard";
+import {
+  createConnectionRouter,
+  withNewConnection,
+} from "../connectionRouting";
+import { StudyTableView } from "./StudyTableView";
+import {
+  CELL_W,
+  CELL_H,
+  TABLE_TITLE,
+  MAX_POINTS,
+  PEN_COLORS,
+  createTable,
+  tableSize,
+  strokePath,
+  studyBounds,
+} from "../studyTools";
+export type Tool = "select" | "note" | "pan" | "table" | "pen";
 type Gesture =
+  | { kind: "ink"; stroke: InkStroke }
+  | { kind: "insert-table"; start: Point }
   | {
       kind: "resize";
       start: Point;
@@ -67,6 +92,8 @@ export function Canvas({
   fullscreen,
   onToggleFullscreen,
   quickTest,
+  testsHidden,
+  onToggleTests,
 }: {
   pulse: number;
   active: string[];
@@ -76,6 +103,8 @@ export function Canvas({
   fullscreen: boolean;
   onToggleFullscreen: () => void;
   quickTest: ReactNode;
+  testsHidden: boolean;
+  onToggleTests: () => void;
 }) {
   const {
     doc,
@@ -88,12 +117,23 @@ export function Canvas({
     past,
     future,
     removeSelected,
+    setInitialNode,
   } = useEditor();
+  const routeConnection = useMemo(() => createConnectionRouter(doc), [doc]);
   const [editingNote, setEditingNote] = useState<{
     note: Note;
     document: Automaton;
   } | null>(null);
   const currentNote = editingNote?.document === doc ? editingNote.note : null;
+  const [editingCell, setEditingCell] = useState<{
+    id: string;
+    row: number;
+    col: number;
+    document: Automaton;
+  } | null>(null);
+  const currentCell = editingCell?.document === doc ? editingCell : null;
+  const [penColor, setPenColor] = useState<string>(PEN_COLORS[0][1]);
+  const [penWidth, setPenWidth] = useState(3);
   const beginNoteEditing = (note: Note) => {
     setTool("select");
     setEditingNote({ note, document: doc });
@@ -133,7 +173,7 @@ export function Canvas({
     commit((d) => {
       const existing = d.edges.find((e) => e.id === edge.id);
       if (existing) existing.symbols = symbols;
-      else d.edges.push({ ...edge, symbols });
+      else d.edges = withNewConnection(d, { ...edge, symbols }).edges;
     });
     select({ ...emptySelection(), edges: [edge.id] });
     setEditing(null);
@@ -148,6 +188,7 @@ export function Canvas({
   const [renaming, setRenaming] = useState<{
     nodeId: string;
     document: Automaton;
+    initialText?: string;
   } | null>(null);
   const currentContext = context?.document === doc ? context : null;
   const renameNode =
@@ -178,8 +219,20 @@ export function Canvas({
       id,
       kind,
       document: doc,
-      x: Math.max(8, Math.min(clientX - bounds.left, bounds.width - 188)),
-      y: Math.max(8, Math.min(clientY - bounds.top, bounds.height - 104)),
+      x: Math.max(
+        8,
+        Math.min(
+          clientX - bounds.left,
+          bounds.width - (kind === "nodes" ? 264 : 188),
+        ),
+      ),
+      y: Math.max(
+        8,
+        Math.min(
+          clientY - bounds.top,
+          bounds.height - (kind === "nodes" ? 156 : 104),
+        ),
+      ),
     });
   };
   const svg = useRef<SVGSVGElement>(null),
@@ -240,14 +293,17 @@ export function Canvas({
   }, []);
   const down = (e: ReactPointerEvent<SVGSVGElement>) => {
     // An outside click first commits the focused label through its blur event.
-    if (currentEdit || renameNode || currentNote) return;
+    if (currentEdit || renameNode || currentNote || currentCell) return;
     if (gesture.current || ![0, 1, 2].includes(e.button)) return;
+    e.currentTarget.focus({ preventScroll: true });
     rightPress.current = null;
     const target = e.target as Element,
       p = local(e.clientX, e.clientY),
       anchor = target.closest("[data-anchor]")?.getAttribute("data-anchor"),
       node = target.closest("[data-node]")?.getAttribute("data-node"),
       note = target.closest("[data-note]")?.getAttribute("data-note"),
+      table = target.closest("[data-table]")?.getAttribute("data-table"),
+      stroke = target.closest("[data-stroke]")?.getAttribute("data-stroke"),
       edge =
         target.closest("[data-edge]")?.getAttribute("data-edge") ??
         target.closest("[data-edge-label]")?.getAttribute("data-edge-label");
@@ -265,13 +321,17 @@ export function Canvas({
         rightPress.current = {
           start: { x: e.clientX, y: e.clientY },
           moved: false,
-          target: node
-            ? { kind: "nodes", id: node }
-            : note
-              ? { kind: "notes", id: note }
-              : edge
-                ? { kind: "edges", id: edge }
-                : undefined,
+          target: table
+            ? { kind: "tables", id: table }
+            : stroke
+              ? { kind: "strokes", id: stroke }
+              : node
+                ? { kind: "nodes", id: node }
+                : note
+                  ? { kind: "notes", id: note }
+                  : edge
+                    ? { kind: "edges", id: edge }
+                    : undefined,
         };
       gesture.current = {
         kind: "pan",
@@ -283,6 +343,23 @@ export function Canvas({
       return;
     }
     const additive = e.ctrlKey || e.metaKey || e.shiftKey;
+    if (tool === "pen" && e.button === 0) {
+      e.preventDefault();
+      select(emptySelection());
+      gesture.current = {
+        kind: "ink",
+        stroke: {
+          ...p,
+          id: uid(),
+          color: penColor,
+          width: penWidth,
+          points: [{ x: 0, y: 0 }],
+        },
+      };
+      e.currentTarget.setPointerCapture(e.pointerId);
+      setDraft(gesture.current);
+      return;
+    }
     // Outside navigation mode, labels edit symbols instead of bending curves.
     if (
       edge &&
@@ -309,9 +386,15 @@ export function Canvas({
       };
     } else if (anchor && e.button === 0) {
       gesture.current = { kind: "connect", source: anchor, start: p, end: p };
-    } else if ((node || note) && e.button === 0) {
-      const key = node ? "nodes" : "notes",
-        id = (node || note)!;
+    } else if ((node || note || table || stroke) && e.button === 0) {
+      const key = node
+          ? "nodes"
+          : note
+            ? "notes"
+            : table
+              ? "tables"
+              : "strokes",
+        id = (node || note || table || stroke)!;
       let selected = selection;
       if (additive) {
         selected = {
@@ -355,6 +438,8 @@ export function Canvas({
         handle: edgeGeometry(base, doc).handle,
         moved: false,
       };
+    } else if (tool === "table" && e.button === 0) {
+      gesture.current = { kind: "insert-table", start: p };
     } else if (tool === "note" && e.button === 0) {
       select(emptySelection());
       gesture.current = { kind: "insert-note", start: p };
@@ -388,8 +473,23 @@ export function Canvas({
   const move = (e: ReactPointerEvent<SVGSVGElement>) => {
     const g = gesture.current;
     if (!g) return;
-    if (g.kind === "insert-note") return;
+    if (g.kind === "insert-note" || g.kind === "insert-table") return;
     const p = local(e.clientX, e.clientY);
+    if (g.kind === "ink") {
+      const last = g.stroke.points.at(-1)!;
+      const point = { x: p.x - g.stroke.x, y: p.y - g.stroke.y };
+      if (
+        g.stroke.points.length < MAX_POINTS &&
+        Math.hypot(point.x - last.x, point.y - last.y) >= 0.7 / zoom
+      ) {
+        gesture.current = {
+          kind: "ink",
+          stroke: { ...g.stroke, points: [...g.stroke.points, point] },
+        };
+        setDraft(gesture.current);
+      }
+      return;
+    }
     if (g.kind === "resize") {
       if (!g.moved && Math.hypot(p.x - g.start.x, p.y - g.start.y) < 3 / zoom)
         return;
@@ -464,7 +564,20 @@ export function Canvas({
     const g = gesture.current;
     if (!g) return;
     const p = local(e.clientX, e.clientY);
-    if (g.kind === "resize") {
+    if (g.kind === "ink") {
+      commit((d) => {
+        (d.strokes ??= []).push(g.stroke);
+      });
+    } else if (g.kind === "insert-table") {
+      if (Math.hypot(p.x - g.start.x, p.y - g.start.y) < 4 / zoom) {
+        const table = createTable(doc, g.start, uid());
+        commit((d) => {
+          (d.tables ??= []).push(table);
+        });
+        select({ ...emptySelection(), tables: [table.id] });
+        setTool("select");
+      }
+    } else if (g.kind === "resize") {
       if (g.moved)
         commit((d) => {
           const note = d.notes.find((n) => n.id === g.note.id);
@@ -481,14 +594,12 @@ export function Canvas({
         });
     } else if (g.kind === "connect") {
       // Pointer capture keeps events on the SVG. Hit-test coordinates, not event.target.
-      const target = [...doc.nodes]
-        .reverse()
-        .find((n) => Math.hypot(n.x - p.x, n.y - p.y) < R + 12);
-      if (target && Math.hypot(p.x - g.start.x, p.y - g.start.y) > 7)
+      const connection = routeConnection(g.source, p, g.start);
+      if (connection?.target)
         beginEditing(
-          doc.edges.find(
-            (edge) => edge.source === g.source && edge.target === target.id,
-          ) ?? { id: uid(), source: g.source, target: target.id, symbols: [] },
+          doc.edges.includes(connection.edge)
+            ? connection.edge
+            : { ...connection.edge, id: uid() },
         );
     } else if (g.kind === "move" && (g.delta.x || g.delta.y))
       commit((d) => {
@@ -502,6 +613,12 @@ export function Canvas({
             n.x += g.delta.x;
             n.y += g.delta.y;
           }
+        for (const key of ["tables", "strokes"] as const)
+          for (const item of d[key] ?? [])
+            if (g.selection[key].includes(item.id)) {
+              item.x += g.delta.x;
+              item.y += g.delta.y;
+            }
       });
     else if (
       g.kind === "insert-note" &&
@@ -564,6 +681,29 @@ export function Canvas({
         nodes: [...new Set([...base.nodes, ...nodes])],
         edges: [...new Set([...base.edges, ...edges])],
         notes: [...new Set([...base.notes, ...notes])],
+        tables: [
+          ...new Set([
+            ...base.tables,
+            ...(doc.tables ?? [])
+              .filter(
+                (t) =>
+                  inside(t) &&
+                  inside({
+                    x: t.x + tableSize(t).width,
+                    y: t.y + tableSize(t).height,
+                  }),
+              )
+              .map((t) => t.id),
+          ]),
+        ],
+        strokes: [
+          ...new Set([
+            ...base.strokes,
+            ...(doc.strokes ?? [])
+              .filter((s) => studyBounds({ strokes: [s] }).every(inside))
+              .map((s) => s.id),
+          ]),
+        ],
       });
     }
     clear();
@@ -598,12 +738,26 @@ export function Canvas({
                   ? { ...n, x: n.x + draft.delta.x, y: n.y + draft.delta.y }
                   : n,
               ),
+              tables: doc.tables?.map((t) =>
+                draft.selection.tables.includes(t.id)
+                  ? { ...t, x: t.x + draft.delta.x, y: t.y + draft.delta.y }
+                  : t,
+              ),
+              strokes: doc.strokes?.map((s) =>
+                draft.selection.strokes.includes(s.id)
+                  ? { ...s, x: s.x + draft.delta.x, y: s.y + draft.delta.y }
+                  : s,
+              ),
             }
           : doc;
   const visible =
     currentEdit && !doc.edges.some((edge) => edge.id === currentEdit.edge.id)
-      ? { ...positioned, edges: [...positioned.edges, currentEdit.edge] }
+      ? withNewConnection(positioned, currentEdit.edge)
       : positioned;
+  const connection =
+    draft?.kind === "connect"
+      ? routeConnection(draft.source, draft.end, draft.start)
+      : null;
   const editPosition = currentEdit
     ? edgeGeometry(currentEdit.edge, visible).label
     : null;
@@ -654,6 +808,7 @@ export function Canvas({
   }, [zoom, origin]);
   const fit = () => {
     const points = [
+      ...studyBounds(doc),
       ...doc.nodes.flatMap((n) => [
         { x: n.x - 90, y: n.y - 50 },
         { x: n.x + 50, y: n.y + 50 },
@@ -711,6 +866,8 @@ export function Canvas({
         {(
           [
             ["note", Type, "Texto"],
+            ["table", Table2, "Tabela"],
+            ["pen", Pencil, "Canetinha"],
             ["pan", draft?.kind === "pan" ? Grab : Hand, "Arrastar quadro"],
           ] as const
         ).map(([key, Icon, label]) => (
@@ -747,10 +904,77 @@ export function Canvas({
         </button>
       </div>
       <div className="canvas-wrap">
+        {tool === "pen" && (
+          <div
+            className="pen-options"
+            role="group"
+            aria-label="Opções da canetinha"
+          >
+            <label>
+              Espessura{" "}
+              <input
+                aria-label="Espessura da canetinha"
+                type="range"
+                min="1"
+                max="12"
+                step="1"
+                value={penWidth}
+                onChange={(e) => setPenWidth(+e.target.value)}
+              />
+            </label>
+            <span className="pen-width">{penWidth} px</span>
+            <div
+              className="pen-palette"
+              role="group"
+              aria-label="Cores da canetinha"
+            >
+              {PEN_COLORS.map(([name, color]) => (
+                <button
+                  key={color}
+                  aria-label={`Cor ${name}`}
+                  aria-pressed={penColor === color}
+                  title={name}
+                  style={{ backgroundColor: color }}
+                  onClick={() => setPenColor(color)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
         <svg
           ref={svg}
           className={`canvas tool-${displayedTool}${draft?.kind === "pan" ? " is-panning" : ""}`}
           aria-label="Canvas de autômatos"
+          tabIndex={0}
+          onKeyDown={(event) => {
+            if (
+              event.target !== event.currentTarget ||
+              gesture.current ||
+              currentContext ||
+              currentEdit ||
+              currentNote ||
+              currentCell ||
+              renameNode
+            )
+              return;
+            if (
+              selection.nodes.length !== 1 ||
+              Object.values(selection).reduce(
+                (sum, ids) => sum + ids.length,
+                0,
+              ) !== 1
+            )
+              return;
+            const initialText = renameCharacter(event.nativeEvent);
+            if (initialText === null) return;
+            event.preventDefault();
+            event.stopPropagation();
+            setRenaming({
+              nodeId: selection.nodes[0],
+              document: doc,
+              initialText,
+            });
+          }}
           viewBox={`${origin.x} ${origin.y} ${viewport.width / zoom} ${viewport.height / zoom}`}
           onPointerDown={down}
           onPointerMove={move}
@@ -791,10 +1015,41 @@ export function Canvas({
             }
           }}
           onDoubleClick={(e) => {
-            if (tool === "pan" || currentEdit || currentNote || renameNode)
+            if (
+              tool === "pan" ||
+              tool === "pen" ||
+              currentEdit ||
+              currentNote ||
+              renameNode ||
+              currentCell
+            )
               return;
             const t = e.target as Element;
             const point = local(e.clientX, e.clientY);
+            const tableHit = [...(doc.tables ?? [])].reverse().find((table) => {
+              const size = tableSize(table);
+              return (
+                point.x >= table.x &&
+                point.x <= table.x + size.width &&
+                point.y >= table.y &&
+                point.y <= table.y + size.height
+              );
+            });
+            if (tableHit) {
+              select({ ...emptySelection(), tables: [tableHit.id] });
+              const row = Math.floor(
+                (point.y - tableHit.y - TABLE_TITLE) / CELL_H,
+              );
+              const col = Math.floor((point.x - tableHit.x) / CELL_W);
+              if (
+                row >= 0 &&
+                row < tableHit.cells.length &&
+                col < tableHit.cells[0].length
+              )
+                setEditingCell({ id: tableHit.id, row, col, document: doc });
+              return;
+            }
+            if (t.closest("[data-stroke]")) return;
             const edgeId =
               t.closest("[data-edge]")?.getAttribute("data-edge") ??
               t.closest("[data-edge-label]")?.getAttribute("data-edge-label") ??
@@ -873,8 +1128,76 @@ export function Canvas({
             pulse={pulse}
             editingEdge={currentEdit?.edge.id}
             editingNote={currentNote?.id}
+            editingNode={renameNode?.id}
+            connectionTarget={connection?.target}
             interactive
           />
+          {(visible.tables ?? []).map((table) => (
+            <StudyTableView
+              key={table.id}
+              table={table}
+              selected={selection.tables.includes(table.id)}
+              editing={currentCell?.id === table.id ? currentCell : undefined}
+              onCancel={() => setEditingCell(null)}
+              onSave={(text) => {
+                if (!currentCell) return;
+                commit((d) => {
+                  const t = d.tables?.find((t) => t.id === table.id);
+                  if (t) t.cells[currentCell.row][currentCell.col] = text;
+                });
+                setEditingCell(null);
+              }}
+              onResize={(rows, cols) =>
+                commit((d) => {
+                  const t = d.tables?.find((t) => t.id === table.id);
+                  if (!t) return;
+                  if (rows > 0) t.cells.push(t.cells[0].map(() => ""));
+                  if (rows < 0) t.cells.pop();
+                  if (cols > 0) t.cells.forEach((row) => row.push(""));
+                  if (cols < 0) t.cells.forEach((row) => row.pop());
+                })
+              }
+            />
+          ))}
+          {[
+            ...(visible.strokes ?? []),
+            ...(draft?.kind === "ink" ? [draft.stroke] : []),
+          ].map((stroke) => (
+            <g
+              key={stroke.id}
+              data-stroke={stroke.id}
+              transform={`translate(${stroke.x} ${stroke.y})`}
+              className={`ink-stroke ${selection.strokes.includes(stroke.id) ? "selected" : ""}`}
+            >
+              {selection.strokes.includes(stroke.id) && (
+                <path
+                  d={strokePath(stroke)}
+                  fill="none"
+                  stroke="var(--accent)"
+                  strokeWidth={stroke.width + 7}
+                  opacity={0.35}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              )}
+              <path
+                className="ink-line"
+                d={strokePath(stroke)}
+                fill="none"
+                stroke={stroke.color}
+                strokeWidth={stroke.width}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d={strokePath(stroke)}
+                fill="none"
+                stroke="transparent"
+                strokeWidth={Math.max(14, stroke.width)}
+                strokeLinecap="round"
+              />
+            </g>
+          ))}
           {guides.x !== undefined && (
             <line
               className="snap-guide"
@@ -893,12 +1216,15 @@ export function Canvas({
               x2={origin.x + viewport.width / zoom}
             />
           )}
-          {draft?.kind === "connect" && (
-            <path
-              className="connection-draft"
-              d={`M${draft.start.x} ${draft.start.y} Q${(draft.start.x + draft.end.x) / 2} ${Math.min(draft.start.y, draft.end.y) - 40} ${draft.end.x} ${draft.end.y}`}
-              markerEnd="url(#arrow)"
-            />
+          {connection && (
+            <g pointerEvents="none" aria-hidden="true">
+              <path className="connection-glow" d={connection.geometry.path} />
+              <path
+                className={`connection-draft${connection.target ? " is-snapped" : ""}`}
+                d={connection.geometry.path}
+                markerEnd="url(#arrow)"
+              />
+            </g>
           )}
           {draft?.kind === "marquee" && (
             <rect
@@ -911,22 +1237,29 @@ export function Canvas({
           )}
           {renameNode && (
             <foreignObject
-              x={renameNode.x - 140}
-              y={renameNode.y - 18}
-              width={280}
-              height={100}
+              x={renameNode.x - 210}
+              y={renameNode.y - 14}
+              width={420}
+              height={28}
               className="edge-input-overlay"
             >
               <StateNameInput
                 key={renameNode.id}
                 name={renameNode.label}
-                onCancel={() => setRenaming(null)}
-                onConfirm={(name) => {
+                initialText={renaming?.initialText}
+                onCancel={(viaBlur) => {
+                  setRenaming(null);
+                  if (viaBlur) select(emptySelection());
+                  else svg.current?.focus({ preventScroll: true });
+                }}
+                onConfirm={(name, viaBlur) => {
                   commit((d) => {
                     const node = d.nodes.find((n) => n.id === renameNode.id);
                     if (node) node.label = name;
                   });
                   setRenaming(null);
+                  if (viaBlur) select(emptySelection());
+                  else svg.current?.focus({ preventScroll: true });
                 }}
               />
             </foreignObject>
@@ -942,7 +1275,6 @@ export function Canvas({
               <TransitionSymbolsInput
                 key={currentEdit.edge.id}
                 initialValue={currentEdit.edge.symbols.join(", ")}
-                mode={doc.mode}
                 inline
                 onConfirm={finishEditing}
                 onCancel={() => setEditing(null)}
@@ -981,21 +1313,48 @@ export function Canvas({
             x={currentContext.x}
             y={currentContext.y}
             onClose={() => setContext(null)}
-            label={
+            isInitial={
+              doc.nodes.find((node) => node.id === currentContext.id)?.initial
+            }
+            onSetInitial={
               currentContext.kind === "nodes"
-                ? "Opções do estado"
-                : currentContext.kind === "notes"
-                  ? "Opções da anotação"
-                  : "Opções da transição"
+                ? () => {
+                    setInitialNode(currentContext.id);
+                    setContext(null);
+                    svg.current?.focus({ preventScroll: true });
+                  }
+                : undefined
+            }
+            label={
+              currentContext.kind === "tables"
+                ? "Opções da tabela"
+                : currentContext.kind === "strokes"
+                  ? "Opções do traço"
+                  : currentContext.kind === "nodes"
+                    ? "Opções do estado"
+                    : currentContext.kind === "notes"
+                      ? "Opções da anotação"
+                      : "Opções da transição"
             }
             editLabel={
-              currentContext.kind === "nodes"
-                ? "Renomear"
-                : currentContext.kind === "notes"
-                  ? "Editar texto"
-                  : "Editar símbolos"
+              currentContext.kind === "tables"
+                ? "Editar tabela"
+                : currentContext.kind === "strokes"
+                  ? "Selecionar traço"
+                  : currentContext.kind === "nodes"
+                    ? "Renomear"
+                    : currentContext.kind === "notes"
+                      ? "Editar texto"
+                      : "Editar símbolos"
             }
             onRename={() => {
+              if (currentContext.kind === "tables")
+                setEditingCell({
+                  id: currentContext.id,
+                  row: 0,
+                  col: 0,
+                  document: doc,
+                });
               if (currentContext.kind === "nodes")
                 setRenaming({ nodeId: currentContext.id, document: doc });
               if (currentContext.kind === "notes")
@@ -1024,7 +1383,11 @@ export function Canvas({
               ? "Arraste para mover o quadro"
               : tool === "note"
                 ? "Clique: inserir texto"
-                : "Duplo clique: estado"}
+                : tool === "table"
+                  ? "Clique: inserir tabela"
+                  : tool === "pen"
+                    ? "Arraste para desenhar · clique na canetinha para sair"
+                    : "Duplo clique: estado"}
           </span>
           <i />
           <span>
@@ -1034,6 +1397,21 @@ export function Canvas({
           </span>
         </div>
         <div className="zoom-controls">
+          <button
+            aria-label={
+              testsHidden ? "Mostrar área de testes" : "Ocultar área de testes"
+            }
+            title={
+              testsHidden
+                ? "Mostrar área de testes"
+                : "Ocultar testes e ampliar quadro"
+            }
+            aria-pressed={testsHidden}
+            onClick={onToggleTests}
+          >
+            {testsHidden ? <Eye size={16} /> : <EyeOff size={16} />}
+          </button>
+          <i />
           <button aria-label="Diminuir zoom" onClick={() => zoomTo(zoom - 0.1)}>
             <Minus size={16} />
           </button>
@@ -1072,7 +1450,9 @@ export function Canvas({
           SVG · Vetorial <span className="footer-dot">•</span>{" "}
           {selection.nodes.length +
             selection.edges.length +
-            selection.notes.length || "Nenhum"}{" "}
+            selection.notes.length +
+            selection.tables.length +
+            selection.strokes.length || "Nenhum"}{" "}
           selecionado(s)
         </span>
       </div>
